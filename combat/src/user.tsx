@@ -1,4 +1,5 @@
 import { getFullName } from "./string"
+import styles from "./user.css"
 
 export interface UserProps {
   image: string
@@ -14,29 +15,10 @@ const User: React.FC<UserProps> = ({
   description,
 }) => {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <img
-        src={image}
-        style={{
-          width: 66,
-          height: 66,
-          border: "1px solid #ccc",
-          borderRadius: "50%",
-          padding: 8,
-          flexShrink: 0,
-        }}
-      />
-      <div
-        style={{
-          flex: "auto",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-evenly",
-          alignItems: "start",
-          gap: 10,
-        }}
-      >
-        <div style={{ fontWeight: "bold" }}>
+    <div className={styles.container}>
+      <img src={image} />
+      <div className={styles.user_info}>
+        <div className={styles.full_name}>
           {getFullName(firstName, lastName)}
         </div>
         {description && <div>{description}</div>}

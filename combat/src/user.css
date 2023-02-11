@@ -1,0 +1,28 @@
+.container {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.container > img {
+  width: 66px;
+  height: 66px;
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  padding: 8px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.user_info {
+  flex: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.full_name {
+  font-weight: bold;
+}
