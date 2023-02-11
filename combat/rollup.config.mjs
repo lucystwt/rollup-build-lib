@@ -15,11 +15,11 @@ export default defineConfig([
     plugins: [
       commonjs(),
       nodeResolve(),
-      typescript({ tsconfig: "./tsconfig.json" }),
+      typescript(),
       babel({
-        presets: ["@babel/preset-env"],
-        extensions: [".js"],
         babelHelpers: "bundled",
+        presets: ["@babel/preset-env"],
+        extensions: [".js", ".ts"],
       }),
     ],
   },

@@ -145,7 +145,7 @@ plugins: [commonjs()]
 
 Rollup 原生不支持打包 node_modules 下的第三方模块，需要使用 node-resolver 处理第三方模块的打包
 
-以流行的工具库 lodash 为例说明，安装 lodash，src/main.js 下新增一个函数 addByLodash，执行 build 命令，会发现 lodash 的 add 函数并没有被打包进我们的代码
+以流行的工具库 lodash 为例说明，安装 lodash，src/main.js 下新增一个 mySum 函数调用 lodash 的 sum 函数，执行 build 命令，会发现 lodash 的 sum 函数并没有被打包进我们的代码里
 
 ```shell
 pnpm add lodash
@@ -154,8 +154,8 @@ pnpm add lodash
 ```javascript
 import _ from "lodash"
 
-export function addByLodash(a, b) {
-  return _.add(a, b)
+export function mySum(collection) {
+  return _.sum(collection)
 }
 ```
 
@@ -181,67 +181,20 @@ Tree-shaking 其实就是字面意思，摇树，把死叶子摇下来，只需�
 
 我们把 lodash 替换为 lodash es，再执行 build，会发现之前近 2W 行代码变成了 300 多行，说明 Tree-sharking 已经生效
 
-```javascript
-import { add as _add } from "lodash-es"
-
-export function addByLodash(a, b) {
-  return _add(a, b)
-}
-```
-
-注意，这里的 import \_ 必须换成 import { add } 的形式，不然 Tree-shaking 是不会生效的
-
----
-
-# Babel
-
-Babel 是一个工具链，主要用于将 ECMAScript 2015+ 代码转换为当前和旧版浏览器或环境中向后兼容的 JavaScript 版本。以下是 Babel 可以做的主要事情
-
-- 转换语法
-- 目标环境中缺少的 Polyfill 功能（通过第三方 polyfill，例如 core-js）
-- 源代码转换 (codemods)
-
-```javascript
-// Babel Input: ES2015 arrow function
-;[1, 2, 3].map((n) => n + 1)
-
-// Babel Output: ES5 equivalent
-;[1, 2, 3].map(function (n) {
-  return n + 1
-})
-```
-
----
-
-# @rollup/plugin-babel (Rollup 集成 Babel)
-
-src/main.js 新增一个 getFullName 函数，这个函数用到了 3 个新的 ES2015+ 特性，const、箭头函数和模板字符串，build 之后，文件没有什么变化
-
-```javascript
-export const getFullName = (firstName, lastName) => {
-  return `${firstName} ${lastName}`
-}
-```
-
-接着我们使用 @rollup/plugin-babel 插件，重新 build 之后，发现代码已经被转换成了 ES2015 以下的版本
-
 ```shell
-pnpm add @babel/core @babel/preset-env @rollup/plugin-babel -D
+pnpm remove lodash
+pnpm add lodash-es
 ```
 
 ```javascript
-import { babel } from "@rollup/plugin-babel"
+import { sum } from "lodash-es"
 
-plugins: [
-  nodeResolve(),
-  commonjs(),
-  babel({
-    presets: ["@babel/preset-env"],
-    extensions: [".js"],
-    babelHelpers: "bundled",
-  }),
-],
+export function mySum(collection) {
+  return sum(collection)
+}
 ```
+
+注意，这里的 import \_ 必须换成 import { sum } 的形式，不然 Tree-shaking 是不会生效的
 
 ---
 
@@ -270,13 +223,15 @@ function updateUser(id: number, update: Partial<User>) {
 
 ---
 
-# TypeScript 集成
-安装 typescript，执行 tsc --init，目录下会新增一个 tsconfig.json，这是 ts 的配置文件
+# TypeScript 配置
+安装 typescript，执行 tsc --init，目录下会新增一个 tsconfig.json
 
 ```shell
 pnpm add typescript -D
 npx tsc --init
 ```
+
+这是 ts 的配置文件
 
 ```json
 {
@@ -287,6 +242,7 @@ npx tsc --init
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
+    "moduleResolution": "node", // 很关键
     "isolatedModules": true,
     "declaration": true,
     "declarationDir": "./types"
@@ -298,82 +254,204 @@ npx tsc --init
 
 ---
 
-# @rollup/plugin-typescript
+# 项目结构优化，并改造为 TypeScript 工程
 
-Rollup 原生不支持 TypeScript 的打包，需要通过插件集成
-```shell
-pnpm add @rollup/plugin-typescript -D
-```
-
-需要注意，Rollup 插件有先后顺序之分，typescript 插件需要放在 babel 之前
-
-```javascript
-import typescript from "@rollup/plugin-typescript"
-
-plugins: [
-  nodeResolve(),
-  commonjs(),
-  typescript({ tsconfig: "./tsconfig.json" }),
-  babel({
-    presets: ["@babel/preset-env", "@babel/preset-typescript"],
-    extensions: [".js", ".ts"],
-    babelHelpers: "bundled",
-  }),
-]
-```
-
----
-
-# 改造为 TypeScript 工程
-替换 src/main.js 为 src/main.ts，此时会发现文件会有很多报错，先把函数的类型补全，然后发现 lodash-es 还是飘红，提示说需要我们安装 @types/lodash-es，因为有些第三方库是 JavaScript 开发的，没有提供类型声明，所以库的开发者或社区有其它的人来维护这个库的声明文件，大部分流行的 JavaScript 库都有提供声明文件，声明文件需要单独安装，命名标准是 @types/{库名称}
-
-```
-pnpm add -D @types/lodash-es
-```
-
-改造后的 src/main.ts
+1. 新增 src/string.ts 文件，导出一个 getFullName 的函数
+2. 新增一个 src/calc.ts 文件，将 main.js 里所有的内容剪切到这，并修复没有类型导致报错的问题
+3. 将 src/main.js 重命名 为 src/main.ts，作为入口文件导出 src/string.ts、src/calc.ts
 
 ```typescript
-import { add as _add } from "lodash-es"
+// src/string.ts
+export const getFullName = (firstName: string, lastName: string) => `${firstName} ${lastName}`
 
-export function add(a: string, b: number) {
+// src/calc.ts
+import { sum } from "lodash-es"
+
+export function add(a: number, b: number) {
   return a + b
 }
 
-export function addByLodash(a: number, b: number) {
-  return _add(a, b)
+export function mySum(collection: number[]) {
+  return sum(a, b)
 }
 
-export const getFullName = (firstName: string, lastName: string) => {
-  return `${firstName} ${lastName}`
-}
+// src/main.ts
+export * from './calc'
+export * from './string' 
+```
+
+--- 
+
+# TypeScript 声明文件
+
+此时发现 lodash-es 还是报错，提示说需要我们安装 @types/lodash-es，这是因为有些第三方库是 JavaScript 开发的，没有类型的概念，在 TypeScript 文件里面使用根本不知道参数、返回值啥的是什么类型，所以库的开发者或社区会有其他的人来维护这个库里所有的 TypeScript 类型，这个类型文件叫做声明文件，以 {xxx}.d.ts 命名
+
+大部分流行的 JavaScript 库都有提供声明文件，如果库中已经集成了声明文件，就能直接在 TypeScript 里面使用，否则需要单独安装，声明文件库命名标准是 @types/{库名称}。
+
+如果是 TypeScript 开发的项目，打包的时候也可以同时配置帮我们打包声明文件，我们之前在 tsconfig.json 里面也已经配置过了打包声明文件
+
+我们需要安装 @types/lodash-es，安装完毕后发现 lodash-es 的报错已经消失了
+
+
+```shell
+pnpm add @types/lodash-es -D
 ```
 
 ---
 
-# 打包 TypeScript 工程
+# @rollup/plugin-typescript 和 rollup-plugin-dts
 
-修改 Rollup 入口文件配置，执行 build 打包，打包成功后 dist 目录下会多出一个 types 目录，里面有一个 main.d.ts，这是 TypeScript 源代码输出的所有声明文件，就是之前在 tsconfig.json 里的 declaration 配置。
-
-一般比较主流的做法是将所有文件的类型声明全部输出到某一个文件里，而不是四散在各个文件中，有一个库可以帮忙完成这个任务，rollup-plugin-dts，需要在 Rollup 数组配置里新增一项打包声明文件的配置，执行 build 后，会发现 dist 目录下有一个 index.d.ts 文件，这个就是汇总之后的声明文件
+Rollup 原生不支持 TypeScript 的打包，需要通过插件集成，先安装相关的插件，然后修改 Rollup 配置
 
 ```shell
-pnpm add rollup-plugin-dts -D
+pnpm add @rollup/plugin-typescript rollup-plugin-dts -D
+ 
 ```
 
 ```javascript
+import typescript from "@rollup/plugin-typescript"
 import dts from "rollup-plugin-dts"
 
 input: "src/main.ts",
-
-// 这里是数组的第二项，之前的打包配置是数组的第一项
+plugins: [nodeResolve(), commonjs(), typescript()], // 插件会自动识别 tsconfig.json 配置文件
+// 这里是 defineConfig 数组的第二项配置，意思是帮我们汇总 dist/types 下所有的声明文件到 dist/index.d.ts
 {
   input: "dist/types/main.d.ts",
   output: [{ file: "dist/index.d.ts", format: "es" }],
   plugins: [dts()],
-},
+}
 ```
 
-可以先试着不加 Rollup 的 TypeScript 插件，打包会报
-<span style="color: red;">[!] RollupError: Unexpected token (Note that you need plugins to import files that are not JavaScript)</span>
-错误
+执行 build 打包，成功后 dist 目录下会多出一个 types 目录，里面包含了项目所有的声明文件，因为我们在 tsconfig.json 里指定了声明文件输出的目录为 ./types，但同时还有一个 dist/index.d.ts 文件，这就是 rollup-plugin-dts 的作用，这个插件会帮我们汇总所有的声明文件到一个文件里，不至于会四散在各个文件里面
+
+---
+
+# Babel
+
+Babel 是一个工具链，主要用于将 ECMAScript 2015+ 代码转换为当前和旧版浏览器或环境中向后兼容的 JavaScript 版本。以下是 Babel 可以做的主要事情
+
+- 转换语法
+- 目标环境中缺少的 Polyfill 功能（通过第三方 polyfill，例如 core-js）
+- 源代码转换 (codemods)
+
+```javascript
+// Babel Input: ES2015 arrow function
+;[1, 2, 3].map((n) => n + 1)
+
+// Babel Output: ES5 equivalent
+;[1, 2, 3].map(function (n) {
+  return n + 1
+})
+```
+
+---
+
+# @rollup/plugin-babel
+之前我们在 src/string.ts 里新增了一个 getFullName 函数，其实这个函数用到了3个新的 ES2015+ 特性，const、箭头函数和模板字符串，老旧的浏览器中是无法识别这种语法的，我们可以通过 babel 去解决这个问题
+
+```typescript
+// ES2015+ 语法
+export const getFullName = (firstName: string, lastName: string) => `${firstName} ${lastName}`
+
+// ES2015 之前的语法
+export var getFullName = function (firstName: string, lastName: string) {
+  return firstName + ' ' + lastName
+}
+```
+
+安装 Rollup 集成 Babel所需要的依赖，然后修改 rollup.config.js，重新 build 之后，会发现代码已经被转换成了 ES2015 以下的版本
+
+```shell
+pnpm add @babel/core @babel/preset-env @rollup/plugin-babel -D
+```
+
+```javascript
+import { babel } from "@rollup/plugin-babel"
+
+plugins: [
+  commonjs(), nodeResolve(), typescript(),
+  babel({ babelHelpers: "bundled", presets: ["@babel/preset-env"], extensions: [".js", ".ts"] }), // presets 作用是帮我转换成低版本代码，这里还需要配置支持 .ts 扩展名
+],
+```
+
+---
+
+# Vitest
+Vitest 是一个极速的单元测试框架，特性如下（其实有很多，我没有从官网都抄过来）：
+
+- 重用 Vite 的配置、转换器、解析器和插件——在您的应用程序和测试中保持一致
+- Expect、snapshot、coverage 等——从 Jest 迁移非常简单
+- 只重新运行相关的更改，就像 HMR 进行测试一样
+- 由 esbuild 提供支持的开箱即用的 ESM、TypeScript 和 JSX
+
+
+目前前端最流行的单元测试框架是 Jest（貌似是），不选它是因为对 ESM 和 TypeScript 支持不友好，需要通过 babel 或 ts-jest 这两种方式支持（库割裂严重且都有一定问题），而 Vitest 开箱即用（真香），安装 Vitest，然后在 package.json 的 scripts 里新增2条命令，coverage 是测试覆盖率相关的
+
+```shell
+pnpm add vitest -D
+```
+
+```json
+scripts: {
+  "build": "rollup -c",
+  "test": "vitest",
+  "coverage": "vitest run --coverage"
+}
+```
+
+---
+
+# 编写单元测试
+新增测试文件，一般测试文件都以 .test.ts 为后缀（看个人风格）
+
+```typescript
+// src/calc.test.ts
+import { assert, describe, expect, it } from "vitest"
+import { add, mySum } from "./calc"
+describe("calc module", () => {
+  it("add fn", () => {
+    expect(add(1, 2)).toEqual(3) // 成功
+  })
+  it("mySum fn", () => {
+    assert.equal(mySum([1, 2, 3]), 6) 成功
+  })
+})
+
+// src/string.test.ts，这里忽略了 import，因为空间不太够
+it("getFullName fn", () => {
+  const correctResult = "Chengyang Han"
+  expect(getFullName("Chengyang", "Han")).toBe(correctResult) // 成功
+  expect(getFullName("cHEnGyang", "HaN")).toBe(correctResult) // 失败
+  expect(getFullName(" C heng ya ng", "Ha n ")).toBe(correctResult) // 失败
+})
+```
+
+describe 我理解为是将测试用例分组的意思。这里故意写了2个失败的测试用例，但发现只抛出了一个错误，是因为在同一个 it 函数下只会抛出第一个错误，如果确实想要2个错误，就单独再用1个 it 函数（个人理解）
+
+---
+
+# 优化 getFullName 函数
+
+修改 getFullName 如下，Vitest 有 HMR 特性无需重新执行 test 命令，发现测试已经通过
+
+```typescript
+export const getFullName = (firstName: string, lastName: string) => {
+  let _firstName = firstName.replace(/\s+/g, "")
+  let _lastName = lastName.replace(/\s+/g, "")
+
+  _firstName =
+    _firstName.slice(0, 1).toUpperCase() + _firstName.slice(1).toLowerCase()
+  _lastName =
+    _lastName.slice(0, 1).toUpperCase() + _lastName.slice(1).toLowerCase()
+
+  return `${_firstName} ${_lastName}`
+}
+```
+
+总之，单元测试可以让我们的项目变得更加健壮，就和 TypeScript 一样，属于前期多花费一些成本，但可以让后期维护的成本更加低廉！
+
+---
+class: "text-center mt-30"
+---
+
+# Thank you for watching
