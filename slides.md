@@ -179,7 +179,7 @@ Tree-shaking 其实就是字面意思，摇树，把死叶子摇下来，只需�
 
 这个时候会发现，我们只使用了 lodash 的 add 函数，却多了将近 2W 行代码，虽然对于后端项目来说问题不大，但对于前端来说是不太可取的，因为 lodash 是 commonjs 实现的， Tree-shaking 只有 ES Module 才支持（我自己理解的），好在 lodash 提供了一个 ES Module 版本，叫 lodash-es
 
-我们把 lodash 替换为 lodash es，再执行 build，会发现之前近 2W 行代码变成了 300 多行，说明 Tree-sharking 已经生效
+我们把 lodash 替换为 lodash es，再执行 build，会发现之前近 2W 行代码变成了 70 多行，说明 Tree-sharking 已经生效
 
 ```shell
 pnpm remove lodash
@@ -248,7 +248,7 @@ npx tsc --init
     "declarationDir": "./types"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"] // 这里忽略了测试文件，和以后单元测试相关
 }
 ```
 
@@ -451,7 +451,182 @@ export const getFullName = (firstName: string, lastName: string) => {
 总之，单元测试可以让我们的项目变得更加健壮，就和 TypeScript 一样，属于前期多花费一些成本，但可以让后期维护的成本更加低廉！
 
 ---
+
+# 项目发布
+npm (Node Package Manager) 是一个 Node.js 包管理和分发工具，已经成为了非官方的发布 Node 模块（包）的标准，目前基本已经成为前端统一发布包的网站，发布包之前需要对 package.json 做几个配置
+
+```json
+"name": "my-lib", // 包名，也就是通过 npm install 的名字
+"version": "1.0.0", // 包版本，第1位代表大版本、第2位代表小版本、第3位代表补丁版本
+"license": "MIT", // 开源协议，一般 MIT、BSD、Apache 的开源协议用的比较多
+"author": "hcy", // 作者
+"description": "A JavaScript helper library, written in TypeScript.", // 描述
+"keywords": ["lib", "library", "helpers", "utils"], // 关键词，在 npm 搜索上以 Tags 的形式展示
+"homepage": "https://github.com/lucystwt/wingman", // 包的官网，如果没有可以不填，会在 npm 上提供跳转链接
+"repository": { "type": "git", "url": "https://github.com/lucystwt/wingman" }, // 包的仓库也就是源码，也会在 npm 上提供跳转链接
+"files": ["dist"], // 发布到 npm 上的文件，我们一般只会发布 dist 下的文件，不会把源代码也发布上去。注意这里 npm 也会同时将我们的 LICENSE、README.md、package.json 等文件也一起发布上去，不要在这里填写一些隐私有关的东西
+"main": "dist/index.cjs", // CommonJS 识别的入口文件
+"module": "dist/index.mjs", // ESM 识别的入口文件
+"types": "dist/index.d.ts", // TS 声明文件
+```
+
+这些配置完毕之后可以使用 npm whoami，如果没有登录会提示我们使用 npm adduser，终端会提供输入用户名邮箱密码相关的信息（需要邮箱验证），注册完毕之后使用 npm login 命令登录，登录成功之后使用 npm publish 就可以发布到 npm 上了（每次发布前都需要修改之前未使用过的版本号，不然会提示报错）
+
+---
+
+# 发布前的工作
+当然发布没有那么简单，可能我们代码写的有问题就不小心发布上去了，建议这里对发布前做一些处理，在 package.json 的 scripts 新增几个脚本命令
+
+```json
+"scripts": {
+  "build": "rimraf dist && rollup -c",
+  "test": "vitest",
+  "coverage": "vitest run --coverage",
+  "lint": "eslint .", // eslint 是检查代码的语法规范相关的，在之前一次技术分享分享过，这里略过如何使用
+  "check": "tsc -p tsconfig.json --noEmit", // tsc 是检查 ts 语法的编译器，-p 意思是提供一个 ts 配置文件，--noEmit 意思是只执行检查而不编译成 js 文件
+  "ci": "pnpm build && pnpm test && pnpm lint && pnpm check", // 将 build、test、lint、check 这几个命令串起来执行
+  "prepublishOnly": "pnpm ci", // 这是 npm 提供的一个钩子，每次执行 npm publish 之前都会执行这个命令，如果执行失败，npm publish 将不会执行
+}
+```
+
+发布前执行 ci 命令可以让我们发布的内容更可靠健壮
+
+- build 可以让发布的包是最新的代码
+- test 可以让发布前通过单元测试
+- lint 和 check 可以保证我们的代码符合语法规范
+
+---
+
+# 构建 React 组件
+安装 react、react-dom 和其声明库，新增 src/user.tsx 文件编写一个 React 组件，并从 src/main.ts 默认导出
+
+注意，还需要在 tsconfig.json 的 compilerOptions 里新增一项 "jsx": "react-jsx" 配置，这是 React 17+ 新出来的特性，无需在每次编写 React 组件的时候 import React from 'react' 了
+
+```shell
+pnpm add react react-dom @types/react @types/react-dom -D
+```
+
+```json
+// tsconfig.json
+"jsx": "react-jsx" // 可选值有 react、react-jsx、react-native、react-jsxdev 等
+```
+
+```typescript
+// src/main.ts
+export * from "./calc"
+export * from "./string"
+export { default as User } from "./user"
+
+// user.tsx，代码太多了显示不完整了
+import { getFullName } from "./string"
+
+export interface UserProps {
+  image: string
+  firstName: string
+  lastName: string
+  description?: React.ReactNode
+}
+
+const User: React.FC<UserProps> = ({
+  image,
+  firstName,
+  lastName,
+  description,
+}) => {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <img
+        src={image}
+        style={{
+          width: 66,
+          height: 66,
+          border: "1px solid #ccc",
+          borderRadius: "50%",
+          padding: 8,
+          flexShrink: 0,
+        }}
+      />
+      <div
+        style={{
+          flex: "auto",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-evenly",
+          alignItems: "start",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: "bold" }}>
+          {getFullName(firstName, lastName)}
+        </div>
+        {description && <div>{description}</div>}
+      </div>
+    </div>
+  )
+}
+
+export default User
+```
+
+---
+
+# peerDependencies
+
+package.json 主要有3个和管理依赖相关的属性
+
+1. dependencies (执行 install 没有加 -D 的时候，会随着库安装的同时一起被安装)
+2. devDependencies (执行 install 加了 -D 的时候，不会随着库安装的同时一起被安装)
+3. peerDependencies (这个需要自己管理依赖的指定版本，会让使用者同时一起安装的依赖)
+
+lodash 的 sum 函数与生产环境相关，安装到 dependencies，其余的依赖都是打包、单元测试相关，安装到 devDependencies，React 需要同时放进 peerDependencies 和 devDependencies 而不是 dependencies，因为用户如果需要使用 React 组件，肯定是一个基于 React 的项目，没必要让用户再安装一次了，此时我们要使用 peerDependencies 指定我们的 React 库依赖的 React 版本
+
+```json
+"peerDependencies": {
+  "react": ">=16.8.0", // React Hooks 基于 16.8，如果需要使用并发相关特性，需要指定 "react": ">=18.0.0"
+  "react-dom": ">=16.8.0"
+}
+```
+
+其实开发库用到的所有依赖都可以不放到 dependencies，而是 peerDependencies，交给用户来安装，比如：
+
+```shell
+pnpm add lodash-es react react-dom lib-a lib-b lib-c lib-d lib-e lib-f lib-g # 用户可能要骂人了，所以还是建议库的开发者对依赖管理做一些取舍
+```
+
+---
+
+# 简单测试 React 组件
+
+那么如何测试这个组件呢，组件的单元测试编写要复杂的多先不过多介绍了，还有一种方案是使用 Storybook 这个库（简称 SB）,可以以隔离组件的形式进行 UI 测试，这个也需要一些配置，而且目前对 pnpm 支持不友好
+
+我们使用最简单的组件测试形式 link，npm、yarn、pnpm 对 link 的使用都有点不同（需要参照对应的文档）
+
+pnpm link 操作步骤如下：
+
+1. 在当前开发库的根目录下执行 pnpm link --global，这个库就被 link 到全局了，库名为 package.json 里的 name 字段，入口文件 根据环境有所不同，可能是 main 或者 module 字段的值
+2. 在别的项目中执行 pnpm link {name} --global，这样就能直接使用开发库了
+
+实际操作一下，使用 pnpm create vite 创建一个 React 项目
+
+```typescript
+import { User } from "my-lib" // 库执行 link 时使用的名称
+
+<User 
+  image={image} 
+  firstName="Chengyang" 
+  lastName="Han"
+  description={<span style={{ color: "red" }}>我是前端开发</span>}
+/>
+```
+
+---
+
+# CSS-in-JS
+111
+
+---
 class: "text-center mt-30"
 ---
 
 # Thank you for watching
+感谢你的观看
